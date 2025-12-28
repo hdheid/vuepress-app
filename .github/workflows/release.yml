@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         # 这里定义我们要构建的平台：Windows 和 Linux
-        platform: [ubuntu-22.04, windows-latest]
+        platform: [ubuntu-22.04, windows-latest, macos-latest]
 
     runs-on: ${{ matrix.platform }}
 
@@ -30,12 +30,12 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      # 专门为 Linux 环境安装依赖 (这是你在 Windows 上做不到的关键步骤)
+      # 专门为 Linux 环境安装依赖 (注意：这里从 4.0 升级到了 4.1)
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev javascriptcoregtk-4.1-dev
 
       - name: Install frontend dependencies
         run: npm install # 或者是 yarn install / pnpm install
