@@ -2,31 +2,50 @@
 import { ref, onMounted, watch, onUnmounted } from 'vue';
 import { useProjectStore } from '../stores/project';
 import { useToastStore } from '../stores/toast';
+import { useThemeStore } from '../stores/theme';
 import { invoke } from '@tauri-apps/api/core';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import FileTree from '../components/FileTree.vue';
-import MarkdownIt from 'markdown-it';
-import { Save, GitCommitHorizontal, UploadCloud, RefreshCw, FolderOpen, Loader2 } from 'lucide-vue-next';
+import { createMarkdownRenderer } from '../utils/markdown';
+import { Save, GitCommitHorizontal, UploadCloud, RefreshCw, FolderOpen, Loader2, Moon, Sun } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
+import 'highlight.js/styles/atom-one-dark.css'; // Dark mode highlight
+import 'highlight.js/styles/atom-one-light.css'; // Light mode highlight (will override if loaded last, need dynamic switching)
 
 const router = useRouter();
 const projectStore = useProjectStore();
 const toast = useToastStore();
+const themeStore = useThemeStore();
 
 const files = ref<any[]>([]);
 const currentContent = ref('');
 const currentPath = ref('');
 const previewHtml = ref('');
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: true
-});
+const md = createMarkdownRenderer();
+
 const isDirty = ref(false);
 const commitMsg = ref('');
 const showCommitDialog = ref(false);
 const isCommitting = ref(false);
 const isPushing = ref(false);
+
+// Dynamic highlight.js theme loading
+const loadHighlightTheme = (isDark: boolean) => {
+    const darkTheme = document.getElementById('hljs-dark');
+    const lightTheme = document.getElementById('hljs-light');
+    
+    if (isDark) {
+        if (darkTheme) darkTheme.removeAttribute('disabled');
+        if (lightTheme) lightTheme.setAttribute('disabled', 'true');
+    } else {
+        if (darkTheme) darkTheme.setAttribute('disabled', 'true');
+        if (lightTheme) lightTheme.removeAttribute('disabled');
+    }
+}
+
+watch(() => themeStore.isDark, (val) => {
+    loadHighlightTheme(val);
+}, { immediate: true });
 
 async function loadFiles() {
   if (!projectStore.projectPath) {
@@ -121,6 +140,23 @@ function handleKeydown(e: KeyboardEvent) {
 onMounted(() => {
   loadFiles();
   window.addEventListener('keydown', handleKeydown);
+  
+  // Inject CSS for highlight.js if not present
+  if (!document.getElementById('hljs-dark')) {
+      const link = document.createElement('link');
+      link.id = 'hljs-dark';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
+      document.head.appendChild(link);
+  }
+  if (!document.getElementById('hljs-light')) {
+      const link = document.createElement('link');
+      link.id = 'hljs-light';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css';
+      document.head.appendChild(link);
+  }
+  loadHighlightTheme(themeStore.isDark);
 });
 
 onUnmounted(() => {
@@ -129,16 +165,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-screen flex text-white overflow-hidden bg-transparent">
+  <div class="h-screen flex transition-colors duration-300 overflow-hidden bg-transparent text-gray-800 dark:text-white">
     <!-- Sidebar -->
     <div class="w-72 flex flex-col glass-panel border-r-0 my-4 ml-4 rounded-xl overflow-hidden">
-      <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5 backdrop-blur-md">
-        <span class="font-bold text-xs tracking-wider text-gray-300">EXPLORER</span>
+      <div class="p-4 border-b flex justify-between items-center backdrop-blur-md border-gray-200 dark:border-white/10 bg-white/40 dark:bg-white/5">
+        <span class="font-bold text-xs tracking-wider text-gray-500 dark:text-gray-300">EXPLORER</span>
         <div class="flex space-x-1">
-            <button @click="loadFiles" class="p-1.5 hover:bg-white/10 rounded-md text-gray-400 hover:text-white transition-colors" title="Refresh">
+            <button @click="loadFiles" class="p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded-md text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors" title="Refresh">
                 <RefreshCw :size="14"/>
             </button>
-             <button @click="router.push('/')" class="p-1.5 hover:bg-white/10 rounded-md text-gray-400 hover:text-white transition-colors" title="Open Project">
+             <button @click="router.push('/')" class="p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded-md text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors" title="Open Project">
                 <FolderOpen :size="14"/>
             </button>
         </div>
@@ -151,13 +187,21 @@ onUnmounted(() => {
     <!-- Main Content -->
     <div class="flex-1 flex flex-col relative m-4 ml-2 glass-panel rounded-xl overflow-hidden">
        <!-- Toolbar -->
-       <div class="h-14 border-b border-white/10 flex items-center px-6 bg-white/5 backdrop-blur-md justify-between">
+       <div class="h-14 border-b flex items-center px-6 backdrop-blur-md justify-between border-gray-200 dark:border-white/10 bg-white/40 dark:bg-white/5">
           <div class="flex items-center space-x-2 overflow-hidden">
             <div class="w-2 h-2 rounded-full" :class="isDirty ? 'bg-yellow-500' : 'bg-green-500'"></div>
-            <div class="text-sm text-gray-300 truncate max-w-md font-medium tracking-wide">{{ currentPath || 'No file selected' }}</div>
+            <div class="text-sm truncate max-w-md font-medium tracking-wide text-gray-600 dark:text-gray-300">{{ currentPath || 'No file selected' }}</div>
           </div>
           
           <div class="flex items-center space-x-3">
+             <!-- Theme Toggle -->
+             <button @click="themeStore.toggle()" class="glass-button flex items-center justify-center p-2" :title="themeStore.isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+                 <Moon v-if="themeStore.isDark" :size="16" />
+                 <Sun v-else :size="16" />
+             </button>
+
+             <div class="w-px h-6 bg-gray-300 dark:bg-white/10 mx-2"></div>
+
              <button @click="saveFile" :disabled="!isDirty" class="glass-button flex items-center space-x-2" :class="{'opacity-50 cursor-not-allowed': !isDirty}" title="Save (Ctrl+S)">
                 <Save :size="16" />
                 <span class="text-xs font-medium">Save</span>
@@ -172,8 +216,8 @@ onUnmounted(() => {
                  <!-- Commit Dialog Popover -->
                  <div v-if="showCommitDialog" class="absolute top-12 right-0 z-50 w-80 glass-card p-4 animate-in fade-in slide-in-from-top-2 duration-200">
                     <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wide">Commit Changes</h3>
-                        <button @click="showCommitDialog = false" class="text-gray-500 hover:text-white transition-colors">✕</button>
+                        <h3 class="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300">Commit Changes</h3>
+                        <button @click="showCommitDialog = false" class="text-gray-400 hover:text-gray-800 dark:text-gray-500 dark:hover:text-white transition-colors">✕</button>
                     </div>
                     <textarea 
                         v-model="commitMsg" 
@@ -201,19 +245,19 @@ onUnmounted(() => {
        <!-- Editor & Preview Split -->
        <div class="flex-1 flex overflow-hidden">
           <!-- Editor -->
-          <div class="w-1/2 flex flex-col border-r border-white/10 bg-black/20">
+          <div class="w-1/2 flex flex-col border-r border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-black/20">
              <textarea 
                v-model="currentContent" 
-               class="flex-1 w-full bg-transparent text-gray-200 p-6 outline-none resize-none font-mono text-sm leading-relaxed selection:bg-blue-500/30 placeholder-gray-600"
+               class="flex-1 w-full bg-transparent p-6 outline-none resize-none font-mono text-sm leading-relaxed selection:bg-blue-500/30 placeholder-gray-400 dark:placeholder-gray-600 text-gray-800 dark:text-gray-200"
                placeholder="Select a file to start editing..."
                spellcheck="false"
              ></textarea>
           </div>
           
           <!-- Preview -->
-          <div class="w-1/2 flex flex-col bg-black/10 relative">
-             <div class="absolute top-0 right-0 p-2 text-[10px] text-gray-600 font-bold uppercase tracking-widest select-none pointer-events-none">Preview</div>
-             <div class="flex-1 p-8 overflow-y-auto prose prose-invert prose-sm max-w-none prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10" v-html="previewHtml">
+          <div class="w-1/2 flex flex-col relative bg-white/50 dark:bg-black/10">
+             <div class="absolute top-0 right-0 p-2 text-[10px] font-bold uppercase tracking-widest select-none pointer-events-none text-gray-400 dark:text-gray-600">Preview</div>
+             <div class="flex-1 p-8 overflow-y-auto prose prose-sm max-w-none dark:prose-invert" v-html="previewHtml">
              </div>
           </div>
        </div>
