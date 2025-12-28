@@ -3,15 +3,18 @@ import { ref } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useRouter } from 'vue-router';
 import { useProjectStore } from '../stores/project';
+import { useToastStore } from '../stores/toast';
 import { exists, readTextFile } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
+import { FolderOpen, ArrowRight } from 'lucide-vue-next';
 
 const router = useRouter();
 const projectStore = useProjectStore();
-const errorMsg = ref('');
+const toast = useToastStore();
+const isLoading = ref(false);
 
 async function openProject() {
-  errorMsg.value = '';
+  isLoading.value = true;
   try {
     const selected = await open({
       directory: true,
@@ -26,7 +29,8 @@ async function openProject() {
       const hasGit = await exists(gitPath); 
       
       if (!hasGit) {
-        errorMsg.value = 'Not a git repository.';
+        toast.add('Not a git repository.', 'error');
+        isLoading.value = false;
         return;
       }
       
@@ -42,33 +46,66 @@ async function openProject() {
              projectStore.setProject(path);
              projectStore.isGitRepo = true;
              projectStore.isVuePressThemePlume = true;
+             toast.add('Project opened successfully', 'success');
              router.push('/editor');
         } else {
-             errorMsg.value = 'vuepress-theme-plume not found in package.json';
+             toast.add('vuepress-theme-plume not found in package.json', 'error');
         }
       } else {
-          errorMsg.value = 'package.json not found.';
+          toast.add('package.json not found.', 'error');
       }
     }
   } catch (err) {
     console.error(err);
-    errorMsg.value = 'Error opening directory: ' + err;
+    toast.add('Error opening directory: ' + err, 'error');
+  } finally {
+    isLoading.value = false;
   }
 }
 </script>
 
 <template>
-  <div class="h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-4 glass">
-    <h1 class="text-4xl font-thin mb-8">VuePress Plume Editor</h1>
-    <button @click="openProject" class="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg backdrop-blur-md transition border border-white/10 cursor-pointer">
-      Open Project
-    </button>
-    <p v-if="errorMsg" class="mt-4 text-red-400 bg-black/50 p-2 rounded">{{ errorMsg }}</p>
+  <div class="h-screen w-full flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <!-- Decorative background elements -->
+    <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-[100px] -z-10 animate-pulse"></div>
+    <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-[100px] -z-10 animate-pulse" style="animation-delay: 1s;"></div>
+
+    <div class="glass-card p-12 flex flex-col items-center max-w-lg w-full text-center relative z-10 border-t border-white/20">
+      <div class="w-20 h-20 bg-gradient-to-tr from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 mb-8 transform hover:scale-105 transition-transform duration-300">
+        <FolderOpen class="text-white w-10 h-10" />
+      </div>
+      
+      <h1 class="text-4xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+        Plume Editor
+      </h1>
+      <p class="text-gray-400 mb-10 text-lg font-light leading-relaxed">
+        A modern, glassmorphism-styled editor for your VuePress Plume projects.
+      </p>
+
+      <button 
+        @click="openProject" 
+        :disabled="isLoading"
+        class="group relative px-8 py-4 bg-white text-black font-semibold rounded-xl hover:bg-gray-100 transition-all duration-300 shadow-xl shadow-white/5 hover:shadow-white/10 w-full flex items-center justify-center space-x-2 overflow-hidden"
+      >
+        <span v-if="isLoading" class="animate-spin mr-2">⟳</span>
+        <span v-else>Open Project</span>
+        <ArrowRight class="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+        
+        <!-- Shine effect -->
+        <div class="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent z-20 w-1/2 skew-x-12"></div>
+      </button>
+
+      <p class="mt-6 text-xs text-gray-500">
+        Requires a valid Git repository with vuepress-theme-plume
+      </p>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.glass {
-    background: radial-gradient(circle at top left, #1e293b, #0f172a);
+@keyframes shimmer {
+  100% {
+    transform: translateX(200%);
+  }
 }
 </style>
