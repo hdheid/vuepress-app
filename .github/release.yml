@@ -1,0 +1,53 @@
+name: Release
+# 触发条件：当你推送以 'v' 开头的 tag (例如 v1.0.0) 时触发
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: # 允许你在 GitHub 网页上手动点击按钮触发
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # 这里定义我们要构建的平台：Windows 和 Linux
+        platform: [ubuntu-22.04, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*' # 使用最新的 LTS 版本
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      # 专门为 Linux 环境安装依赖 (这是你在 Windows 上做不到的关键步骤)
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm install # 或者是 yarn install / pnpm install
+
+      # 使用 Tauri 官方 Action 进行构建和发布
+      - name: Build and upload
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__ # 自动用 tauri.conf.json 里的版本号替换
+          releaseName: 'App v__VERSION__'
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: true # 默认为草稿，构建完你可以确认一下再点发布
+          prerelease: false
